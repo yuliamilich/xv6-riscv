@@ -96,3 +96,8 @@ uint64 sys_memsize(void)
 {
   return myproc()->sz;
 }
+
+int sys_co_yield(void)
+{
+  return 0;
+}
