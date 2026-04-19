@@ -102,8 +102,8 @@ uint64 sys_co_yield(void)
   int message;
   int pid;
 
-  argint(0, &message);
-  argint(1, &pid);
+  argint(0, &pid);
+  argint(1, &message);
 
   // error if:
   // pid doesn't exist or

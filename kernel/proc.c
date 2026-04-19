@@ -482,6 +482,12 @@ void scheduler(void)
         // It should have changed its p->state before coming back.
         c->proc = 0;
       }
+      // TODO: delete the if.
+      if (!holding(&p->lock))
+      {
+        printf("release pid %d in scheduler. \n", p->pid);
+        panic("co_yield release p->lock in scheduler.");
+      }
       release(&p->lock);
     }
   }
@@ -734,6 +740,8 @@ acquire_proc_pair(struct proc *a, struct proc *b)
 static void
 release_proc_pair(struct proc *a, struct proc *b)
 {
+  // TODO: delete debugging
+  printf("release_proc_pair \n");
   release(&a->lock);
   release(&b->lock);
 }
@@ -742,13 +750,16 @@ uint64 co_yield(int pid, int value)
 {
   struct proc *p;
   struct proc *my_p = myproc();
-  struct cpu *c = mycpu();
+  // struct cpu *c = mycpu();
   uint64 returnval;
 
   if (pid <= 0 || pid == my_p->pid)
   {
     return -1;
   }
+
+  // TODO: delete debugging
+  printf("%d co_yield again \n", my_p->pid);
 
   p = find_proc_by_pid(pid);
   if (p == 0)
@@ -762,31 +773,46 @@ uint64 co_yield(int pid, int value)
   {
     if (p->pid != pid || p->state == UNUSED || p->state == ZOMBIE || p->killed)
     {
+      // TODO: delete debugging
+      printf("%d bad \n", my_p->pid);
       release_proc_pair(my_p, p);
       return -1;
     }
 
     if (p->state == SLEEPING && p->chan == my_p)
     {
+      // TODO: delete debugging
+      printf("%d proc %d ready \n", my_p->pid, p->pid);
       break;
     }
 
+    // TODO: delete debugging
+    printf("%d proc %d not ready, sleep \n", my_p->pid, p->pid);
+    if (!holding(&my_p->lock))
+      panic("co_yield my_p->lock @787");
     release(&my_p->lock);
     sleep(p, &p->lock);
     acquire(&my_p->lock);
   }
 
+  // TODO: delete debugging
+  printf("%d both are ready \n", my_p->pid);
+
   returnval = my_p->trapframe->a0;
   p->trapframe->a0 = (uint64)value;
 
+  // TODO: delete debugging
+  printf("%d swtch \n", my_p->pid);
   // switch
   my_p->chan = p;
   my_p->state = SLEEPING;
 
   p->chan = 0;
   p->state = RUNNING;
-  c->proc = p;
+  // c->proc = p;
 
+  if (!holding(&my_p->lock))
+    panic("co_yield my_p->lock @807");
   release(&my_p->lock);
 
   if (!holding(&p->lock))
@@ -798,13 +824,20 @@ uint64 co_yield(int pid, int value)
 
   swtch(&my_p->context, &p->context);
 
-  // TODO: needed or not? 
+  // TODO: figure out if this is a good idea?
+  wakeup(my_p);
+
+  // TODO: delete debugging
+  printf("%d returned from swtch \n", my_p->pid);
+
+  // TODO: needed or not?
   // c->proc = my_p;
 
-  if (!holding(&my_p->lock))
-    panic("co_yield my_p->lock");
-
   returnval = my_p->trapframe->a0;
+
+  if (!holding(&my_p->lock))
+    panic("co_yield my_p->lock @827");
+
   release(&my_p->lock);
   return returnval;
 }
