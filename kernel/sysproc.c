@@ -116,5 +116,5 @@ uint64 sys_co_yield(void)
     return -1;
   }
 
-  return co_yield(pid, message);
+  return (uint64)co_yield(pid, message);
 }
