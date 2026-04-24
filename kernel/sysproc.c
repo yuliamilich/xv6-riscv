@@ -96,3 +96,25 @@ uint64 sys_memsize(void)
 {
   return myproc()->sz;
 }
+
+uint64 sys_co_yield(void)
+{
+  int message;
+  int pid;
+
+  argint(0, &pid);
+  argint(1, &message);
+
+  // error if:
+  // pid doesn't exist or
+  // is killed or
+  // pid is negative or zero or
+  // pid is the same as the calling process or
+  // something else i deem appropriate:
+  if (pid <= 0 || pid == myproc()->pid)
+  {
+    return -1;
+  }
+
+  return (uint64)co_yield(pid, message);
+}
