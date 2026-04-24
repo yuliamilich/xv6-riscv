@@ -111,6 +111,9 @@ int main(int argc, char *argv[])
     test_invalid_pid();
     test_dead_pid();
     test_ping_pong(10);
+    test_ping_pong(100);
+
+    // test_infinite();
 
     printf("co_test: OK\n");
     exit(0);
