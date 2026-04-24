@@ -74,7 +74,6 @@ static void test_ping_pong(int rounds)
     if (pid < 0)
         fail("fork failed");
 
-    // const int rounds = 10;
     if (pid == 0)
     {
         int msg = -2;

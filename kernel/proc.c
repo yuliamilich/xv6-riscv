@@ -746,6 +746,7 @@ int co_yield(int pid, int value)
   struct proc *p;
   struct proc *my_p = myproc();
   struct cpu *c = mycpu();
+  int returnval;
 
   if (pid <= 0 || pid == my_p->pid)
   {
@@ -768,7 +769,9 @@ int co_yield(int pid, int value)
 
   if (p->state == SLEEPING && p->chan == my_p) // second to reach co_yield.
   {
-    p->trapframe->a0 = value;
+    my_p->trapframe->a0 = value;
+
+    returnval = p->trapframe->a0;
     // switch
     my_p->chan = p;
     my_p->state = SLEEPING;
@@ -777,28 +780,36 @@ int co_yield(int pid, int value)
     p->state = RUNNING;
     c->proc = p;
 
-    if (!holding(&my_p->lock))
-      panic("co_yield my_p->lock");
     release(&my_p->lock);
 
-    if (!holding(&p->lock))
-      panic("co_yield p->lock");
-    if (mycpu()->noff != 1)
-      panic("co_yield locks");
-    if (intr_get())
-      panic("co_yield interruptible");
-
+    // before: hold only p->lock. after: holds only my_p->lock.
     swtch(&my_p->context, &p->context);
   }
   else // first to reach co_yield.
   {
-    if (!holding(&my_p->lock))
-      panic("co_yield my_p->lock @787");
-    release(&my_p->lock);
-    sleep(p, &p->lock);
-    acquire(&my_p->lock);
+    my_p->trapframe->a0 = value;
+    if (p->state == RUNNABLE)
+    {
+      // do swtch
+      my_p->chan = p;
+      my_p->state = SLEEPING;
 
-    p->trapframe->a0 = value;
+      p->chan = 0;
+      p->state = RUNNING;
+      c->proc = p;
+
+      release(&my_p->lock);
+      swtch(&my_p->context, &p->context);
+      acquire(&p->lock);
+    }
+    else
+    {
+      release(&my_p->lock);
+      sleep(p, &p->lock);
+      acquire(&my_p->lock);
+    }
+
+    returnval = p->trapframe->a0;
 
     p->chan = 0;
     p->state = RUNNABLE;
@@ -806,9 +817,9 @@ int co_yield(int pid, int value)
   }
 
   if (!holding(&my_p->lock))
-    panic("co_yield my_p->lock @827");
+    panic("co_yield my_p->lock");
 
   release(&my_p->lock);
 
-  return my_p->trapframe->a0;
+  return returnval;
 }
