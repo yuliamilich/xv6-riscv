@@ -734,11 +734,23 @@ acquire_proc_pair(struct proc *a, struct proc *b)
   }
 }
 
-static void
-release_proc_pair(struct proc *a, struct proc *b)
+static void direct_swtch_for_co_yield(struct proc *a, struct proc *b, struct cpu *c)
 {
+  // hold both locks before.
+  // set a to sleep on chan b to signal it is ready for handoff.
+  // at the end, cpu doesn't hold locks.
+  a->chan = b;
+  a->state = SLEEPING;
+
+  b->chan = 0;
+  b->state = RUNNING;
+  c->proc = b;
+
   release(&a->lock);
-  release(&b->lock);
+
+  // before: hold only b->lock. after: holds only a->lock.
+  swtch(&a->context, &b->context);
+  release(&a->lock);
 }
 
 int co_yield(int pid, int value)
@@ -762,34 +774,36 @@ int co_yield(int pid, int value)
 
   if (p->pid != pid || p->state == UNUSED || p->state == ZOMBIE || p->killed)
   {
-    release_proc_pair(my_p, p);
+    release(&my_p->lock);
+    release(&p->lock);
     return -1;
   }
 
-  if (p->state == SLEEPING && p->chan == my_p) // second to reach co_yield.
+  if (p->state == SLEEPING && p->chan == my_p) // second process to reach co_yield.
   {
     p->trapframe->a0 = value;
     // switch
-    my_p->chan = p;
-    my_p->state = SLEEPING;
-
-    p->chan = 0;
-    p->state = RUNNING;
-    c->proc = p;
-
-    release(&my_p->lock);
-
-    // before: hold only p->lock. after: holds only my_p->lock.
-    swtch(&my_p->context, &p->context);
-    release(&my_p->lock);
+    direct_swtch_for_co_yield(my_p, p, c);
   }
   else // first to reach co_yield.
   {
-    release(&my_p->lock);
-    sleep(p, &p->lock);
+    // if the other process is not runnable, i.e we cannot switch to it, go to sleep (through the scheduler)
+    if (p->state == RUNNABLE)
+    {
+      // switch
+      direct_swtch_for_co_yield(my_p, p, c);
+
+      acquire(&p->lock);
+    }
+    else
+    {
+      release(&my_p->lock);
+      sleep(p, &p->lock);
+    }
 
     p->trapframe->a0 = value;
 
+    // if co_yield was called only once, we want the scheduler to eventually run the process for it to finish its task.
     p->chan = 0;
     p->state = RUNNABLE;
     release(&p->lock);
